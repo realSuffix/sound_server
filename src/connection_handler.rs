@@ -18,31 +18,36 @@ impl ConnectionHandler {
         let (mut producer, consumer) = ring.split();
 
         // create buffer for stream
-        let mut buffer = [0; 8192];
+        let mut buffer = [0; 1024];
 
         // give the buffer a headstart
-        stream.read(&mut buffer).unwrap();
-        buffer
-            .chunks(2)
-            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
-            .for_each(|sample| producer.push(sample).unwrap());
+        // stream.read(&mut buffer).unwrap();
+        // buffer
+        //     .chunks(2)
+        //     .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+        //     .for_each(|sample| producer.push(sample).unwrap());
 
-        // And spawn the thread responsible for playing audio!
+        // // And spawn the thread responsible for playing audio!
         Self::spawn_audio_thread(consumer);
 
-        let mut bytes_read = 1;
-        while bytes_read > 0 {
-            bytes_read = stream.read(&mut buffer).unwrap();
-            buffer
-                .chunks(2)
-                .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
-                .for_each(|sample| {
-                    producer.push(sample);
-                });
-        }
+        // let mut bytes_read = 1;
+        // while bytes_read > 0 {
+        //     bytes_read = stream.read(&mut buffer).unwrap();
+        //     buffer
+        //         .chunks(2)
+        //         .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+        //         .for_each(|sample| {
+        //             producer.push(sample);
+        //         });
+        // }
+
+        stream.bytes()
+            .for_each(|sample| {
+                producer.push(sample.unwrap());
+            });
     }
 
-    fn spawn_audio_thread(mut consumer: Consumer<i16>) {
+    fn spawn_audio_thread(mut consumer: Consumer<u8>) {
         let host = cpal::default_host();
         let event_loop = host.event_loop();
 
@@ -77,9 +82,9 @@ impl ConnectionHandler {
                         buffer: UnknownTypeOutputBuffer::I16(mut buffer),
                     } => {
                         for elem in buffer.iter_mut() {
-                            *elem = match consumer.pop() {
-                                Some(val) => val,
-                                None => 0,
+                            *elem = match (consumer.pop(), consumer.pop()) {
+                                (Some(val1), Some(val2)) => i16::from_le_bytes([val1, val2]),
+                                _ => 0,
                             };
                         }
                     }
